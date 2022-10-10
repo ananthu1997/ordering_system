@@ -55,7 +55,8 @@ def add_customer():
         update_queries = [
             UpdateMany(query["query"], query["params"], upsert=False) for query in update_queries
         ]
-        collection.bulk_write(update_queries, ordered=False)
+        # updates the orders for the existing customer
+        collection.bulk_write(update_queries, ordered=False) 
     else:
         for order in order_details["orders"]:
             if order["item_id"] in existing_items_id:
@@ -68,6 +69,7 @@ def add_customer():
              "order_id": ''.join(
                  random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in
                  range(16))})
+        # inserts the  orders for the new customer
         collection.insert_one(customer)
     return "Successfully Added the customer", 200
 
@@ -87,19 +89,20 @@ def update_item_details(customer, existing_items, update_queries):
     update_queries = [
         UpdateMany(query["query"], query["params"], upsert=False) for query in update_queries
     ]
+    # updates the item count in the admin DB
     collection_1.bulk_write(update_queries, ordered=False)
 
 
-@app.route("/custInfo/<int:custId>", methods=["GET"])
-def get_customer_id(custId):
+@app.route("/custInfo/<int:cust_id>", methods=["GET"])
+def get_customer_id(cust_id):
     """
     Method for fetching individual customer order details by passing the customer Id
     """
-    customer = collection.find_one({"customer_id": custId})
+    customer = collection.find_one({"customer_id": cust_id})
     if customer:
         return jsonify(customer), 200
     else:
-        return f"Customer Id {custId} not found", 200
+        return f"Customer Id {cust_id} not found", 200
 
 
 @app.route("/transaction", methods=["POST"])
@@ -113,13 +116,17 @@ def post_transactions():
     update_queries = []
     customer = collection.find_one({"customer_id": customer_id})
     if customer and customer["Amount to be paid"] != 0:
+        # Updates the transaction status for the customer
         collection.update_one({"customer_id": customer_id}, {
             "$set": {"Amount to be paid": 0, "Status": "Transaction has been completed and order is confirmed"}})
+        # updates the item count in the admin DB
         update_item_details(customer_id, existing_items, update_queries)
+        # Inserts the delivery status in the delivery DB
         collection_2.insert_one(
             {"_id": customer_id, "customer_id": customer_id, "order_id": customer["order_id"],
              "orders": customer["orders"],
              "status": f"Your Order for {customer['order_id']} has been placed in the queue"})
+        # Inserts the logistics data in the logistics DB
         collection_3.insert_one(
             {"_id": customer_id, "customer_id": customer_id, "customer_address": customer["customer_address"],
              "order_id": customer["order_id"], "orders": customer["orders"], "date": today.strftime("%b-%d-%Y")})
@@ -128,7 +135,7 @@ def post_transactions():
     return f"Transaction was successfully completed for customerId {customer_id}", 200
 
 
-@app.route("/updateItems/<int:custId>", methods=["PATCH"])
+@app.route("/updateItems/<int:cust_id>", methods=["PATCH"])
 def update_orders(cust_id):
     """
     Method for adding/updating customer oder details
@@ -143,10 +150,13 @@ def update_orders(cust_id):
     existing_items_id = [item["item_id"] for item in existing_items]
     existing_customer = collection.find_one({"customer_id": cust_id})
     if existing_customer:
-        get_update_queries(customer_id, existing_customer, item_ids, request_payload, update_queries)
+        get_update_queries(customer_id, existing_customer, item_ids, request_payload, update_queries, existing_items_id)
         update_queries = [
             UpdateMany(query["query"], query["params"], upsert=False) for query in update_queries
         ]
+        if not update_queries:
+            return "Item is not present in the stock", 200
+        # updates the orders for the existing customer
         collection.bulk_write(update_queries, ordered=False)
         return f"Successfully update the items for customerId {customer_id}", 200
     else:
@@ -188,8 +198,10 @@ def delete_orders():
         update_queries = [
             UpdateMany(query["query"], query["params"], upsert=False) for query in update_queries
         ]
+        # updates the orders for the existing customer
         collection.bulk_write(update_queries, ordered=False)
         existing_customer = collection.find_one({"customer_id": customer_id})
+        # deletes the existing customer DB
         if existing_customer["Amount to be paid"] == 0:
             collection.delete_one({"customer_id": customer_id})
         return f"Successfully deleted the items for customerId {customer_id}", 200
@@ -218,7 +230,7 @@ def get_update_queries(customer_id, existing_customer, item_ids, request_payload
     for order in request_payload["orders"]:
         if order["item_id"] not in existing_item_id and order["item_id"] in existing_items_id:
             updated_amount = updated_amount + (order["Price"]) * int(order["quantity"])
-            query = {"cutomer_id": customer_id}
+            query = {"customer_id": customer_id}
             param = {"$set": {"Amount to be paid": int(existing_customer["Amount to be paid"]) + updated_amount},
                      "$push": {"orders": order}}
             update_queries.append({"query": query, "params": param})

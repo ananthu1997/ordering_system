@@ -24,7 +24,7 @@ def get_items_info():
         return "No items in found in the Stock", 400
 
 
-@app.route("/getItems/<int:itemId>", methods=["GET"])
+@app.route("/getItems/<int:item_id>", methods=["GET"])
 def get_items_info_by_id(item_id):
     """
     Method to find individual item by its item_id
@@ -61,6 +61,7 @@ def add_items():
         update_queries = [
             UpdateMany(query["query"], query["params"], upsert=False) for query in update_queries
         ]
+        # updates the items for the existing items
         collection_1.bulk_write(update_queries, ordered=False)
     if not insert_query["item_info"] and not update_queries:
         return "Addition to the items to the stock was failed", 200
@@ -91,8 +92,10 @@ def delete_items():
     update_queries = [
         UpdateMany(query["query"], query["params"], upsert=False) for query in update_queries
     ]
+    # updates the items for the existing items
     collection_1.bulk_write(update_queries, ordered=False)
     existing_items = list(collection_1.find({}))
+    # delete the item in item DB when the total quantity is 0
     for item in existing_items:
         if item["total_quantity"] == 0:
             collection_1.delete_one({"item_id": item["item_id"]})

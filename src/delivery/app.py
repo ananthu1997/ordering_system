@@ -68,6 +68,7 @@ def update_delivery_status():
     update_queries = [
         UpdateOne(query["query"], query["params"], upsert=False) for query in update_queries
     ]
+    # updates the delivery status for the existing customer
     collection.bulk_write(update_queries, ordered=False)
     return "Successfully updated the Delivery Status for orders", 200
 
@@ -92,6 +93,7 @@ def update_logistics_data():
     update_queries = [
         UpdateOne(query["query"], query["params"], upsert=False) for query in update_queries
     ]
+    # updates the logistics data for the existing customer
     collection_1.bulk_write(update_queries, ordered=False)
     return "Successfully updated the Logistic data for orders", 200
 
